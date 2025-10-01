@@ -1,0 +1,47 @@
+name: CI-CD Flask Project
+
+on:
+  push:
+    branches: [ "main" ]   # jab main branch pe push hoga
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:        # manual run option
+
+jobs:
+  ci-cd:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2️⃣ SonarQube Scan
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@v2
+        with:
+          host-url: ${{ secrets.SONAR_HOST_URL }}
+          token: ${{ secrets.SONAR_TOKEN }}
+
+      # 3️⃣ Secrets Scan (Gitleaks)
+      - name: Gitleaks Secrets Scan
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --no-git -v
+
+      # 4️⃣ Build Docker Image
+      - name: Build Docker Image
+        run: docker build -t flask-app:${{ github.sha }} .
+
+      # 5️⃣ Trivy Image Scan
+      - name: Scan Docker Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: flask-app:${{ github.sha }}
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+
+      # 6️⃣ Deploy (Docker Compose)
+      - name: Deploy with Docker Compose
+        run: docker-compose up -d --build
